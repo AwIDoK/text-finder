@@ -21,11 +21,12 @@ public slots:
     void change_file(QString dir);
 
 private:
-    QList<QPair<QSet<QString>, QFileInfo>> all_trigrams;
+    QList<QPair<QVector<qint64>, QFileInfo>> all_trigrams;
     QFileSystemWatcher watcher;
     std::atomic_bool alive;
     void add_file_info(QFileInfo const& file_info);
     void search_in_file(QFileInfo const& file_info, QString const& text);
+    qint64 get_trigram_code(QChar const trigram[3]);
     QMutex mutex;
     QString current_dir;
 public:

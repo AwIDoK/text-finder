@@ -3,6 +3,7 @@
 #include <QCryptographicHash>
 #include <QDirIterator>
 #include <QQueue>
+#include <QtDebug>
 
 
 text_finder::text_finder() : mutex(QMutex::Recursive) {
@@ -19,9 +20,13 @@ void text_finder::find_text(QString const& text) {
         emit search_finished();
         return;
     }
-    QVector<QString> trigrams;
+    QVector<qint64> trigrams;
+    QChar trigram[3];
     for (int i = 0; i + 2 < text.size(); i++) {
-        trigrams.push_back(text.mid(i, 3));
+        trigram[0] = text[i];
+        trigram[1] = text[i + 1];
+        trigram[2] = text[i + 2];
+        trigrams.push_back(get_trigram_code(trigram));
     }
     qint64 cnt = 0;
     for (auto const& file_info : all_trigrams) {
@@ -30,7 +35,7 @@ void text_finder::find_text(QString const& text) {
         }
         bool flag = true;
         for (auto const& trigram : trigrams) {
-            if (!file_info.first.contains(trigram)) {
+            if (!std::binary_search(file_info.first.begin(), file_info.first.end(),trigram)) {
                 flag = false;
                 break;
             }
@@ -56,6 +61,9 @@ void text_finder::index_directory(QString dir) {
             break;
         }
         it.next();
+        if (it.fileInfo().isSymLink()) {
+            continue;
+        }
         if (it.fileInfo().isDir()) {
             watcher.addPath(it.fileInfo().filePath());
         } else {
@@ -84,20 +92,20 @@ void text_finder::add_file_info(QFileInfo const& file_info) {
     if (file_info.size() < 3) {
         return;
     }
-    QSet<QString> trigrams;
     QFile file(file_info.filePath());
-    if (file.open(QFile::ReadOnly)) {
+    QSet<qint64> trigram_set;
+    if (file.open(QIODevice::ReadOnly)) {
         QTextStream in(&file);
-        QString trigram;
+        QChar trigram[3];
         for (int i = 0; i < 3; i++) {
             QChar tmp;
             in >> tmp;
+            trigram[i] = tmp;
             if (!tmp.isPrint() && !tmp.isSpace()) {
                 return;
             }
-            trigram += tmp;
         }
-        trigrams.insert(trigram);
+        trigram_set.insert(get_trigram_code(trigram));
         while (!in.atEnd()) {
             if (!alive) {
                 break;
@@ -111,13 +119,18 @@ void text_finder::add_file_info(QFileInfo const& file_info) {
                 return;
             }
             trigram[2] = tmp;
-            trigrams.insert(trigram);
-            if (trigrams.size() > 500000) {
+            trigram_set.insert(get_trigram_code(trigram));
+            if (trigram_set.size() > 500000) {
                 return;
             }
         }
     }
-    all_trigrams.push_back(qMakePair(std::move(trigrams), file_info));
+    QVector<qint64> trigrams;
+    for (auto trigram : trigram_set) {
+        trigrams.append(trigram);
+    }
+    std::sort(trigrams.begin(), trigrams.end());
+    all_trigrams.push_back(qMakePair(trigrams, file_info));
 }
 
 void text_finder::search_in_file(const QFileInfo &file_info, const QString &text) {
@@ -139,7 +152,7 @@ void text_finder::search_in_file(const QFileInfo &file_info, const QString &text
     QList<QChar> before;
     QQueue<QString> occurences;
     qint64 pos = 0;
-    QList<QString> result;
+    QList<QString> result ;
     if (file.open(QFile::ReadOnly)) {
         QTextStream in(&file);
         while (!in.atEnd()) {
@@ -161,7 +174,7 @@ void text_finder::search_in_file(const QFileInfo &file_info, const QString &text
             if (j < text.size() && tmp == text.at(j)) {
                 j++;
             }
-            if (j == text.size()) {
+            if (j  == text.size()) {
                 QString tmp;
                 for (auto c : before) {
                     tmp += c;
@@ -180,4 +193,13 @@ void text_finder::search_in_file(const QFileInfo &file_info, const QString &text
 void text_finder::change_file(QString dir) {
     QMutexLocker locker(&mutex);
     index_directory(current_dir);
+}
+
+qint64 text_finder::get_trigram_code(QChar const trigram[3]) {
+    qint64 res = 0;
+    for (int i = 0; i < 3; i++) {
+        res += trigram[i].unicode();
+        res <<= 16;
+    }
+    return res;
 }
