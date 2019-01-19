@@ -6,6 +6,7 @@
 #include <QFileInfoList>
 #include <QMutex>
 #include <QFileSystemWatcher>
+#include <QFuture>
 
 class text_finder : public QObject {
     Q_OBJECT
@@ -29,10 +30,12 @@ private:
     qint64 get_trigram_code(QChar const trigram[3]);
     QMutex mutex;
     QString current_dir;
+    QList<QFuture<void>> futures;
 public:
     void find_text(QString const& text);
     void index_directory(QString dir);
     text_finder();
+    ~text_finder();
 
 };
 

@@ -4,6 +4,7 @@
 #include <QDirIterator>
 #include <QQueue>
 #include <QtDebug>
+#include <QtConcurrent>
 
 
 text_finder::text_finder() : mutex(QMutex::Recursive) {
@@ -191,8 +192,7 @@ void text_finder::search_in_file(const QFileInfo &file_info, const QString &text
 }
 
 void text_finder::change_file(QString dir) {
-    QMutexLocker locker(&mutex);
-    index_directory(current_dir);
+    futures.push_back(QtConcurrent::run(this, &text_finder::index_directory, current_dir));
 }
 
 qint64 text_finder::get_trigram_code(QChar const trigram[3]) {
@@ -202,4 +202,10 @@ qint64 text_finder::get_trigram_code(QChar const trigram[3]) {
         res <<= 16;
     }
     return res;
+}
+
+text_finder::~text_finder() {
+    for (auto & future : futures) {
+        future.waitForFinished();
+    }
 }

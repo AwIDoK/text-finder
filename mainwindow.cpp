@@ -82,7 +82,7 @@ void main_window::add_occurrence(QString const& file, QList<QString> const& occu
     QDir d(current_dir);
     QTreeWidgetItem* item = new QTreeWidgetItem(ui->treeWidget);
     item->setExpanded(false);
-    item->setText(0, file + " - " + QString::number(occurences.size()) + " occurences");
+    item->setText(0, file + " - " + QString::number(occurences.size()) + (occurences.size() == 1 ? " occurence" : " occurences"));
     for (auto const& occurence : occurences) {
         QTreeWidgetItem* child_item = new QTreeWidgetItem(item);
         child_item->setText(0, occurence);
