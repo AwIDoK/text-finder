@@ -33,7 +33,6 @@ private:
     std::unique_ptr<Ui::MainWindow> ui;
     QString current_dir;
     text_finder fnd;
-    QFileSystemWatcher watcher;
     QFuture<void> future1, future2;
 };
 

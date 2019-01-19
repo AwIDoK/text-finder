@@ -36,7 +36,6 @@ main_window::main_window(QWidget *parent)
     connect(&fnd, &text_finder::search_finished, this, &main_window::finish_search);
     connect(&fnd, &text_finder::indexing_finished, this, &main_window::finish_indexing);
     connect(this, &main_window::killed, &fnd, &text_finder::kill);
-    connect(&watcher, &QFileSystemWatcher::fileChanged, &fnd, &text_finder::change_file);
 }
 
 main_window::~main_window() {
@@ -46,14 +45,10 @@ main_window::~main_window() {
 }
 
 void main_window::index_directory() {
-    if (current_dir.size()) {
-        watcher.removePath(current_dir);
-    }
     current_dir = QFileDialog::getExistingDirectory(this, "Select Directory for Indexing");
     if (current_dir.size() == 0) {
         return;
     }
-    watcher.addPath(current_dir);
     ui->treeWidget->clear();
     ui->actionIndex_Directory->setEnabled(false);
     ui->actionSearch->setEnabled(false);

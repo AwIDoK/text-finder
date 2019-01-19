@@ -5,6 +5,7 @@
 #include <QList>
 #include <QFileInfoList>
 #include <QMutex>
+#include <QFileSystemWatcher>
 
 class text_finder : public QObject {
     Q_OBJECT
@@ -17,17 +18,20 @@ signals:
 
 public slots:
     void kill();
-    void change_file(QString file);
+    void change_file(QString dir);
 
 private:
     QList<QPair<QSet<QString>, QFileInfo>> all_trigrams;
+    QFileSystemWatcher watcher;
     bool alive;
     void add_file_info(QFileInfo const& file_info);
     void search_in_file(QFileInfo const& file_info, QString const& text);
     QMutex mutex;
+    QString current_dir;
 public:
     void find_text(QString const& text);
     void index_directory(QString dir);
+    text_finder();
 
 };
 

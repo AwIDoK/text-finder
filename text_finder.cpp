@@ -5,6 +5,10 @@
 #include <QQueue>
 
 
+text_finder::text_finder() : mutex(QMutex::Recursive) {
+    connect(&watcher, &QFileSystemWatcher::directoryChanged, this, &text_finder::change_file);
+}
+
 void text_finder::find_text(QString const& text) {
     alive = true;
     if (!alive) {
@@ -41,15 +45,22 @@ void text_finder::find_text(QString const& text) {
 
 void text_finder::index_directory(QString dir) {
     QMutexLocker locker(&mutex);
+    watcher.directories().clear();
+    current_dir = dir;
     alive = true;
     all_trigrams.clear();
-    QDirIterator it(dir, QStringList() << "*", QDir::Files, QDirIterator::Subdirectories);
+    QDirIterator it(dir, QStringList() << "*", QDir::Files | QDir::Dirs, QDirIterator::Subdirectories);
     QFileInfoList all;
     while (it.hasNext()) {
         if (!alive) {
             break;
         }
-        all.append(it.next());
+        it.next();
+        if (it.fileInfo().isDir()) {
+            watcher.addPath(it.fileInfo().filePath());
+        } else {
+            all.append(it.fileInfo());
+        }
     }
     if (all.empty()) {
         emit progress_changed(100);
@@ -101,7 +112,7 @@ void text_finder::add_file_info(QFileInfo const& file_info) {
             }
             trigram[2] = tmp;
             trigrams.insert(trigram);
-            if (trigrams.size() > 50000) {
+            if (trigrams.size() > 500000) {
                 return;
             }
         }
@@ -166,13 +177,7 @@ void text_finder::search_in_file(const QFileInfo &file_info, const QString &text
     }
 }
 
-void text_finder::change_file(QString new_file) {
+void text_finder::change_file(QString dir) {
     QMutexLocker locker(&mutex);
-    for (auto it = all_trigrams.begin(); it != all_trigrams.end(); it++) {
-        if ((*it).second.filePath() == new_file) {
-            all_trigrams.erase(it);
-            break;
-        }
-    }
-    add_file_info(new_file);
+    index_directory(current_dir);
 }
