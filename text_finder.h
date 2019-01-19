@@ -23,7 +23,7 @@ public slots:
 private:
     QList<QPair<QSet<QString>, QFileInfo>> all_trigrams;
     QFileSystemWatcher watcher;
-    bool alive;
+    std::atomic_bool alive;
     void add_file_info(QFileInfo const& file_info);
     void search_in_file(QFileInfo const& file_info, QString const& text);
     QMutex mutex;
