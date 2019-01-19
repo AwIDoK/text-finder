@@ -16,9 +16,8 @@ main_window::main_window(QWidget *parent)
     , ui(new Ui::MainWindow) {
     ui->setupUi(this);
     setGeometry(QStyle::alignedRect(Qt::LeftToRight, Qt::AlignCenter, size(), qApp->desktop()->availableGeometry(this)));
-    qRegisterMetaType<QFileInfoList>("QFileInfoList");
+    qRegisterMetaType<QList<QString>>("QList<QString>");
     ui->treeWidget->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-    ui->treeWidget->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 
     QCommonStyle style;
     ui->actionIndex_Directory->setIcon(style.standardIcon(QCommonStyle::SP_DialogOpenButton));
@@ -37,6 +36,7 @@ main_window::main_window(QWidget *parent)
     connect(&fnd, &text_finder::search_finished, this, &main_window::finish_search);
     connect(&fnd, &text_finder::indexing_finished, this, &main_window::finish_indexing);
     connect(this, &main_window::killed, &fnd, &text_finder::kill);
+    connect(&watcher, &QFileSystemWatcher::fileChanged, &fnd, &text_finder::change_file);
 }
 
 main_window::~main_window() {
@@ -46,10 +46,14 @@ main_window::~main_window() {
 }
 
 void main_window::index_directory() {
+    if (current_dir.size()) {
+        watcher.removePath(current_dir);
+    }
     current_dir = QFileDialog::getExistingDirectory(this, "Select Directory for Indexing");
     if (current_dir.size() == 0) {
         return;
     }
+    watcher.addPath(current_dir);
     ui->treeWidget->clear();
     ui->actionIndex_Directory->setEnabled(false);
     ui->actionSearch->setEnabled(false);
@@ -61,9 +65,9 @@ void main_window::index_directory() {
 
 void main_window::search_text() {
     QString text = ui->lineEdit->text();
-    if (text.size() < 5) {
+    if (text.size() < 3) {
         QMessageBox Msgbox;
-        Msgbox.setText("Enter at least 5 symbols");
+        Msgbox.setText("Enter at least 3 symbols");
         Msgbox.exec();
     } else {
         ui->treeWidget->clear();
@@ -79,11 +83,16 @@ void main_window::set_progress_bar(int progress) {
     ui->progressBar->setValue(progress);
 }
 
-void main_window::add_occurrence(QString const& file, QString const& text) {
+void main_window::add_occurrence(QString const& file, QList<QString> const& occurences) {
     QDir d(current_dir);
     QTreeWidgetItem* item = new QTreeWidgetItem(ui->treeWidget);
-    item->setText(0, file);
-    item->setText(1, text);
+    item->setExpanded(false);
+    item->setText(0, file + " - " + QString::number(occurences.size()) + " occurences");
+    for (auto const& occurence : occurences) {
+        QTreeWidgetItem* child_item = new QTreeWidgetItem(item);
+        child_item->setText(0, occurence);
+        item->addChild(child_item);
+    }
     ui->treeWidget->addTopLevelItem(item);
 }
 

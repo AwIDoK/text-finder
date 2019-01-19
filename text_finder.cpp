@@ -2,6 +2,7 @@
 #include <QtDebug>
 #include <QCryptographicHash>
 #include <QDirIterator>
+#include <QQueue>
 
 
 void text_finder::find_text(QString const& text) {
@@ -33,12 +34,13 @@ void text_finder::find_text(QString const& text) {
         if (flag) {
             search_in_file(file_info.second, text);
         }
-        emit progress_changed(100 * (++cnt) / all_trigrams.size());
+        emit progress_changed(static_cast<int>(100 * (++cnt) / all_trigrams.size()));
     }
     emit search_finished();
 }
 
 void text_finder::index_directory(QString dir) {
+    QMutexLocker locker(&mutex);
     alive = true;
     all_trigrams.clear();
     QDirIterator it(dir, QStringList() << "*", QDir::Files, QDirIterator::Subdirectories);
@@ -58,7 +60,7 @@ void text_finder::index_directory(QString dir) {
             break;
         }
         add_file_info(file_info);
-        emit progress_changed(100 * (++cnt) / all.size());
+        emit progress_changed(static_cast<int>(100 * (++cnt) / all.size()));
     }
     emit indexing_finished();
 }
@@ -68,7 +70,7 @@ void text_finder::kill() {
 }
 
 void text_finder::add_file_info(QFileInfo const& file_info) {
-    if (file_info.size() < 5) {
+    if (file_info.size() < 3) {
         return;
     }
     QSet<QString> trigrams;
@@ -99,14 +101,16 @@ void text_finder::add_file_info(QFileInfo const& file_info) {
             }
             trigram[2] = tmp;
             trigrams.insert(trigram);
+            if (trigrams.size() > 50000) {
+                return;
+            }
         }
     }
-    if (trigrams.size() < 50000) {
-        all_trigrams.push_back(qMakePair(std::move(trigrams), file_info));
-    }
+    all_trigrams.push_back(qMakePair(std::move(trigrams), file_info));
 }
 
 void text_finder::search_in_file(const QFileInfo &file_info, const QString &text) {
+    QMutexLocker locker(&mutex);
     QVector<int> prefix_function(text.size());
     for (int i = 1; i < text.size(); i++) {
         int j = prefix_function[i - 1];
@@ -121,11 +125,24 @@ void text_finder::search_in_file(const QFileInfo &file_info, const QString &text
     prefix_function.append(0);
     int prev = 0;
     QFile file(file_info.filePath());
+    QList<QChar> before;
+    QQueue<QString> occurences;
+    qint64 pos = 0;
+    QList<QString> result;
     if (file.open(QFile::ReadOnly)) {
         QTextStream in(&file);
         while (!in.atEnd()) {
             QChar tmp;
             in >> tmp;
+            before += tmp;
+            if (before.size() > text.size() + 20) {
+                before.pop_front();
+            }
+            for (auto i = occurences.size() - 1; i >= 0; i--) {
+                if (occurences[i].size() < text.size() + 40) {
+                    occurences[i] += tmp;
+                }
+            }
             int j = prev;
             while (j > 0 && (j == text.size() || tmp != text.at(j))) {
                 j = prefix_function[j - 1];
@@ -134,10 +151,28 @@ void text_finder::search_in_file(const QFileInfo &file_info, const QString &text
                 j++;
             }
             if (j == text.size()) {
-                emit occurrence_finded(file_info.filePath(), text);
+                QString tmp;
+                for (auto c : before) {
+                    tmp += c;
+                }
+                occurences.append(tmp);
             }
             prev = j;
+            pos++;
         }
     }
-    emit search_finished();
+    if (occurences.size()) {
+        emit occurrence_finded(file_info.filePath(), occurences);
+    }
+}
+
+void text_finder::change_file(QString new_file) {
+    QMutexLocker locker(&mutex);
+    for (auto it = all_trigrams.begin(); it != all_trigrams.end(); it++) {
+        if ((*it).second.filePath() == new_file) {
+            all_trigrams.erase(it);
+            break;
+        }
+    }
+    add_file_info(new_file);
 }
